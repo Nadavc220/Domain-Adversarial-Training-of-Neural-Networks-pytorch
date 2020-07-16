@@ -14,6 +14,10 @@ from classifiers import get_classifier
 from discriminators import get_discriminator
 from params import get_params
 
+ALPHA = 10
+BETA = 0.75
+GAMMA = 10.
+
 class GradReverse(Function):
     lambd = 0
 
@@ -134,15 +138,16 @@ class GRDomainAdaptation:
             self.iters += 1
             p = self.iters / (self.args.n_epochs * self.n_batch)
 
-            lambd = (2. / (1. + np.exp(-10. * p))) - 1
+            lambd = (2. / (1. + np.exp(-GAMMA * p))) - 1
             if self.args.cuda:
                 self.domain_classifier.module.update_lambd(lambd)
             else:
                 self.domain_classifier.update_lambd(lambd)
 
-            lr = self.args.learning_rate / (1. + 10 * p) ** 0.75
+            lr = self.args.learning_rate / (1. + ALPHA * p) ** BETA
             self.discriminator_optimizer.lr = lr
             self.net_optimizer.lr = lr
+            self.encoder_optimizer.lr = lr
 
             #########################################################################
             # set batch size in cases where source and target domain differ in size #
@@ -176,21 +181,14 @@ class GRDomainAdaptation:
             dom_labels = torch.cat([source_disc_labels, target_disc_labels], dim=0)
             dom_output = self.domain_classifier(dom_input)
             dom_loss = F.binary_cross_entropy(dom_output, dom_labels)
-            # source_disc_output = self.domain_classifier(source_img)
-            # target_disc_output = self.domain_classifier(target_img)
-            # source_loss = F.binary_cross_entropy(source_disc_output, source_disc_labels)
-            # target_loss = F.binary_cross_entropy(target_disc_output, target_disc_labels)
 
             # calculate total loss value
-            # domain_class_loss = source_loss + target_loss  # TODO: /2?
             dom_loss.backward()
             self.discriminator_optimizer.step()
             self.encoder_optimizer.step()
             disc_loss += dom_loss
-            # disc_loss += domain_class_loss / 2  # TODO /2?
 
             total_loss += class_net_loss - lambd * dom_loss
-
             tbar.set_description('Net loss: {0:.6f}; Discriminator loss: {1:.6f}; Total Loss: {2:.6f}; {3:.2f}%;'.format((net_loss / (i + 1)),
                                                                                                                          (disc_loss / (i + 1)),
                                                                                                                          (total_loss / (i + 1)),
@@ -249,6 +247,17 @@ class GRDomainAdaptation:
             self.best_target_net_state = deepcopy(self.net.state_dict())
             self.target_best_pred = acc
 
+    def train(self):
+        for epoch in range(self.args.n_epochs):
+            print('Epoch: {}; Source Best: {}; Target Best: {}'.format(epoch, self.source_best_pred, self.target_best_pred))
+            self.train_epoch()
+            self.test_net()
+        output_dir = os.path.join(self.args.check_pth, str(self.target_best_pred))
+        os.makedirs(output_dir, exist_ok=True)
+        self.plot_acc_info(output_dir)
+        torch.save(self.best_source_net_state, os.path.join(output_dir, 'source_model.pth'))
+        torch.save(self.best_target_net_state, os.path.join(output_dir, 'target_model.pth'))
+
     def plot_acc_info(self, output_dir):
         t = np.arange(1, len(self.source_test_acc) + 1, 1)
 
@@ -265,73 +274,8 @@ class GRDomainAdaptation:
         path = os.path.join(output_dir, file_name)
         fig.savefig(path)
 
-    def train(self):
-        for epoch in range(self.args.n_epochs):
-            print('Epoch: {}; Source Best: {}; Target Best: {}'.format(epoch, self.source_best_pred, self.target_best_pred))
-            self.train_epoch()
-            self.test_net()
-        output_dir = os.path.join(self.args.check_pth, str(self.target_best_pred))
-        os.makedirs(output_dir, exist_ok=True)
-        self.plot_acc_info(output_dir)
-        torch.save(self.best_source_net_state, os.path.join(output_dir, 'source_model.pth'))
-        torch.save(self.best_target_net_state, os.path.join(output_dir, 'target_model.pth'))
-
 
 if __name__ == '__main__':
     source_dataset = 'mnist'
     trainer = GRDomainAdaptation(source_dataset)
     trainer.train()
-
-
-
-
-# for i in range(num_epochs):
-#     source_gen = batch_gen(source_batches, source_idx, Xs_train, ys_train)
-#     target_gen = batch_gen(target_batches, target_idx, Xt_train, None)
-#
-#     # iterate over batches
-#     for (source_sample, source_label) in source_gen:
-#
-#         # update lambda and learning rate as suggested in the paper
-#         p = float(j) / num_steps
-#         lambd = 2. / (1. + np.exp(-10. * p)) - 1
-#         lr = 0.01 / (1. + 10 * p) ** 0.75
-#         d_optimizer.lr = lr
-#         c_optimizer.lr = lr
-#         f_optimizer.lr = lr
-#
-#         # exit if batch size incorrect, get next target batch
-#         if len(source_sample) != batch_size / 2:
-#             continue
-#         target_sample = next(target_gen)
-#
-#         # concatenate source and target batch
-#         concat_sample = torch.cat([source_sample, target_sample], 0)
-#
-#         # 1) train feature_extractor and class_classifier on source batch
-#         # reset gradients
-#         f_ext.zero_grad()
-#         c_clf.zero_grad()
-#
-#         # calculate class_classifier predictions on source samples
-#         c_out = c_clf(f_ext(source_sample).view(batch_size // 2, -1))
-#
-#         # optimize feature_extractor and class_classifier on output
-#         f_c_loss = (c_out, source_label.float())
-#         f_c_loss.backward(retain_variables=True)
-#         c_optimizer.step()
-#         f_optimizer.step()
-#
-#         # 2) train feature_extractor and domain_classifier on full batch x
-#         # reset gradients
-#         f_ext.zero_grad()
-#         d_clf.zero_grad()
-#
-#         # calculate domain_classifier predictions on batch x
-#         d_out = d_clf(f_ext(concat_sample).view(batch_size, -1))
-#
-#         # optimize feature_extractor and domain_classifier with output
-#         f_d_loss = d_crit(d_out, yd.float())
-#         f_d_loss.backward(retain_variables=True)
-#         d_optimizer.step()
-#         f_optimizer.step()

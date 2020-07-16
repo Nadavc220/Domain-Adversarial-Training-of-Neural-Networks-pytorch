@@ -3,7 +3,7 @@ class Mnist2MnistMParams:
     def __init__(self):
         self.source_dataset = 'mnist'
         self.target_dataset = 'mnist_m'
-        self.n_epochs = 100
+        self.n_epochs = 50
         self.batch_size_train = 64
         self.batch_size_test = 1000
         self.learning_rate = 0.01

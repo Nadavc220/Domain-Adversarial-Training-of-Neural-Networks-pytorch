@@ -69,7 +69,6 @@ class SvhnClassifier(nn.Module):
 
         self.relu = nn.ReLU()
         self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2)
-        self.softmax = nn.Softmax()
 
     def forward(self, input):
         x = self.encode(input)
