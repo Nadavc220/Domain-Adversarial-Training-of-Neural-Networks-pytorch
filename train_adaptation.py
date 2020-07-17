@@ -118,11 +118,6 @@ class GRDomainAdaptation:
         self.net_optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.learning_rate, momentum=self.args.momentum)
         self.encoder_optimizer = torch.optim.SGD(self.net.parameters(), self.args.learning_rate, momentum=self.args.momentum)
         self.discriminator_optimizer = torch.optim.SGD(self.discriminator.parameters(), lr=self.args.learning_rate, momentum=self.args.momentum)
-        # self.discriminator_optimizer = torch.optim.Adam(self.discriminator.parameters(), lr=self.args.learning_rate, betas=(0.5, 0.999))
-
-        # Define lr scheduler
-
-        # self.disc_criterion = torch.nn.BCELoss()
 
     def train_epoch(self):
         self.net.train()
